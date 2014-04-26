@@ -1,9 +1,11 @@
+import os
 import sys
 import json
 import getpass
 import argparse
+import subprocess
 from operator import itemgetter
-from jobminebrowser import JobmineBrowser, JobmineException
+from jobminebrowser import JobmineBrowser, JobmineException, JobSearchQuery
 from key import store_user_info, get_user_info, remove_user
 
 
@@ -12,8 +14,8 @@ def main(*args):
     Command-line main interface for the Jobmine application.  Runs the application's parser and
     calls the JobmineBrowser accordingly.
 
-    :args               List of command-line arguments, defaults to sys.argv if omitted
-    :return             None
+    :args      List of command-line arguments, defaults to sys.argv if omitted
+    :return    None
     """
     if len(args) == 0:
         args = sys.argv[1:]
@@ -24,22 +26,27 @@ def main(*args):
                                      prog='jobmine', epilog='Who would make such a thing?')
     subparsers = parser.add_subparsers(help='Sub-command menu', dest='command')
 
-    change_user = subparsers.add_parser('change_user', help='Change the default user')
-    change_user.add_argument('--delete', action='store_false', default=False, help='Delete the stored user.')
+    change_user = subparsers.add_parser('change_user', help='change the default user')
+    change_user.add_argument('--delete', action='store_false', default=False, help='delete the stored user.')
 
-    documents = subparsers.add_parser('resumes', help='View/upload/list resumes')
+    documents = subparsers.add_parser('documents', help='view/upload/list resumes')
+    documents.add_argument('--download', action='store_true', default=False, help='download specified document')
+    documents.add_argument('--list', action='store_true', default=False, help='list documents')
+    documents.add_argument('id', nargs='?', help='document id number')
+    documents.add_argument('document_type', nargs='?', choices=('doc', 'package'), help='type of document')
 
-    shortlist = subparsers.add_parser('shortlist', help='Get shortlisted jobs')
+    shortlist = subparsers.add_parser('shortlist', help='get shortlisted jobs')
+    shortlist.add_argument('--add', nargs='?', help='job identifier for a job to add to your shortlist')
 
-    interviews = subparsers.add_parser('interviews', help='Get interviews')
-    interviews.add_argument('--interview', choices=('group', 'special', 'cancelled', 'normal'), default='normal',
-                            help='Specify which interviews to get, defaults to regular interviews.', nargs='?')
+    interviews = subparsers.add_parser('interviews', help='get interviews')
+    interviews.add_argument('interview', choices=('group', 'special', 'cancelled', 'normal'), default='normal',
+                            help='specify which interviews to get, defaults to regular interviews.', nargs='?')
 
     applications = subparsers.add_parser('applications', help='Get applications')
-    applications.add_argument('--active', action='store_false', default=True,
-                              help='Grab applications, specify whether to grab active or inactive (defaults to active).')
+    applications.add_argument('--inactive', action='store_false', default=True,
+                              help='grab applications, specify whether to grab active or inactive (defaults to active).')
 
-    search = subparsers.add_parser('jobs', help='Search for jobs.  All options are optional of course.')
+    search = subparsers.add_parser('jobs', help='search for jobs; all options are optional.')
     search.add_argument('--view', nargs='?', help='view the posting specified by the job id', dest='job_id')
     search.add_argument('--employer', help='string to match employer\'s name')
     search.add_argument('--title', help='string to match job title')
@@ -50,6 +57,7 @@ def main(*args):
     search.add_argument('--status', help='the status of the job', choices=('approved', 'available', 'cancelled', 'posted'),
                         default='posted')
     search.add_argument('--disciplines', help='up to three programs for the jobs', nargs='*')
+    search.add_argument('--limit', help='limit the number of results returned', default=None)
 
     arguments = vars(parser.parse_args(args))
     if arguments['command'] == 'change_user':
@@ -70,34 +78,95 @@ def main(*args):
 
         try:
             browser.authenticate(username, password)
-            if 'job_id' in arguments and arguments['job_id']:
-                command = 'view_%s' % arguments['command'][:-1]
-            else:
-                command = 'list_%s' % arguments['command']
-            result = getattr(browser, command)(**arguments)
-
-            if isinstance(result, list):
-                # Implicit assumping that allow lists returned are list of dictionaries
-                # to be printed in a table.
-                if len(result) == 0:
-                    print "No results found."
+            command, result = arguments['command'], None
+            if command == 'documents':
+                if arguments['list']:
+                    result = browser.list_documents()
+                elif arguments['download']:
+                    result = browser.download_document(arguments['id'], arguments['document_type'])
+                    open_os(result)
+            elif command == 'jobs':
+                if arguments['job_id']:
+                    browser.view_job(arguments['job_id'])
                 else:
-                    print format_as_table(result, result[0].keys(), result[0].keys()).rstrip()
-            elif isinstance(result, dict):
-                print format_as(result)
-            else:
-                print result
+                    filter_keywords = {}
+                    for job_filter in JobSearchQuery.filters:
+                        if arguments[job_filter] is not None:
+                            filter_keywords[job_filter] = arguments[job_filter]
+                    result = browser.list_jobs(filters=filter_keywords, limit=int(arguments['limit']))
+            elif command == 'applications':
+                result = browser.list_applications(active=arguments['inactive'])
+            elif command == 'interviews':
+                result = browser.list_interviews(interview=arguments['interview'])
+            elif command == 'shortlist':
+                if arguments['add']:
+                    result = browser.add_to_shortlist(arguments['add'])
+                else:
+                    result = browser.list_shortlist()
+            # Print out the result formatted based on the type of data returned
+            format(result)
         except JobmineException as e:
+            # Jobmine exception usually means that Jobmine is down, format the string
+            # in a printable manner for the user
             print "Error: %s" % e
 
     return None
 
 
-def format_as(data, keys=None, sort_by_key=None, sort_order_reverse=False):
+def open_os(filepath):
     """
+    Opens the specified file using the devices default handler.
+
+    :filepath    String representing the path to the file
+    :return      None
+    """
+    if sys.platform.startswith('linux'):
+        subprocess.call(['xdg-open', filepath])
+    elif sys.platform.startswith('darwin'):
+        subprocess.call(['open', filepath])
+    else:
+        os.startfile(filepath)
+
+
+def format(result):
+    """
+    Formats the output from the browser call into a string.
+
+    :result    object
+    :return    None
+    """
+    if isinstance(result, list):
+        # Implicit assumping that allow lists returned are list of dictionaries
+        # to be printed in a table.
+        if len(result) == 0:
+            print "No results found."
+        else:
+            print format_as_table(result, result[0].keys(), result[0].keys()).rstrip()
+    elif isinstance(result, dict):
+        print format_as(result)
+    else:
+        print result
+
+
+def format_as(data, keys=None, sort_by_key=None):
+    """
+    Formats a dictionary of key, value inputs into a newline separated key, value
+    pair.
+
+    :data           Dictionary of data to print
+    :keys           Specific keys to show
+    :sort_by_key    Boolean indicates whether or not to sort output by keys
     """
     output = ""
-    for index, (key, value) in enumerate(data.iteritems()):
+    items = data.items()
+
+    if keys:
+        items = list([(key, value) for (key, value) in item if key in keys] for item in items)
+
+    if sort_by_key:
+        items = list(sorted(item, lambda x: x[0]) for item in items)
+
+    for index, (key, value) in enumerate(items):
         if isinstance(value, list):
             value = ", ".join(value)
         output += "{0}:\n{1}".format(key.title().replace(':', ''), value)
