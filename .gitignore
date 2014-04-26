@@ -1,0 +1,5 @@
+# Python compiled code
+*.py[co]
+
+# Emacs temporary files
+*~

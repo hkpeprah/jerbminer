@@ -1,0 +1,13 @@
+04-25-2014
+==========
+* Implemented ability to download resumes and packages
+* Implemented ability to view job information
+* Implemented pagination for job searching
+* Implemented shortlisting
+* TODO: 'Apply', 'Upload Resume', 'Rank'
+
+04-24-2014
+==========
+* Implemented listing jobs, applications, shortlist, profile, resume, etc.
+* TODO: Job pagination for searching
+* TODO: 'Add to Shortlist', 'Apply', 'Download Package', 'Download Resume', 'Upload Resume', 'Rank Job', 'View Job Information'
