@@ -15,7 +15,7 @@ setup(
     packages=['jobmine'],
     scripts=['bin/jobmine'],
     url="http://github.com/hkpeprah/jerbminer",
-    license="LICENSE.txt",
+    license="LICENSE",
     package_data={
         'jobmine': ['resources/*']
     },
