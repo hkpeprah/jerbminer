@@ -277,6 +277,9 @@ class JobmineBrowser(anonbrowser.AnonBrowser):
             regex = '.*trUW_CO_STUD_INTV\$.*'
 
         interviews = self.parse('interviews', regex)
+        # Filter to ensure there are actually interviews as Jobmine implicitly returns
+        # a row of blank interviews.
+        interviews = filter(lambda interview: len(list(itertools.chain(*interview.values()))) > 0, interviews)
         return interviews
 
     def list_profile(self):
