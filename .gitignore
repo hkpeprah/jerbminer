@@ -1,7 +1,18 @@
 # Python compiled code/folders
 *.py[co]
 *.egg-info
-dist/
+*.egg
+*.py~
+dist
+build
+eggs
+parts
+var
+sdist
+develop-eggs
+.installed.cfg
+pip-log.txt
+.coverage
 
 # Emacs temporary files
 *~
