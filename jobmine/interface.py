@@ -27,7 +27,7 @@ def main(*args):
     subparsers = parser.add_subparsers(help='Sub-command menu', dest='command')
 
     change_user = subparsers.add_parser('change_user', help='change the default user')
-    change_user.add_argument('--delete', action='store_false', default=False, help='delete the stored user.')
+    change_user.add_argument('--delete', action='store_true', default=False, help='delete the stored user')
 
     documents = subparsers.add_parser('documents', help='view/upload/list resumes')
     documents.add_argument('--download', action='store_true', default=False, help='download specified document')
@@ -48,6 +48,7 @@ def main(*args):
 
     search = subparsers.add_parser('jobs', help='search for jobs; all options are optional.')
     search.add_argument('--view', nargs='?', help='view the posting specified by the job id', dest='job_id')
+    search.add_argument('--search', action='store_true', default=False, help='search for jobs')
     search.add_argument('--employer', help='string to match employer\'s name')
     search.add_argument('--title', help='string to match job title')
     search.add_argument('--location', help='string for the location of the job')
@@ -68,13 +69,16 @@ def main(*args):
             remove_user(username)
             print 'Deleted user %s' % username
         else:
-            store_user_info(raw_input("Username: "), getpass.getpass("Password: "))
+            username = raw_input("Username: ")
+            store_user_info(username, getpass.getpass("Password: "))
+            print 'Default user is now %s' % username
     else:
         browser = JobmineBrowser()
         username, password = get_user_info()
 
         if username is None or password is None:
-            raise Exception("No user data found.  Have you ran 'change_user'?")
+            print "No user data found.  Have you ran 'change_user'?"
+            exit(1)
 
         try:
             browser.authenticate(username, password)
@@ -87,13 +91,14 @@ def main(*args):
                     open_os(result)
             elif command == 'jobs':
                 if arguments['job_id']:
-                    browser.view_job(arguments['job_id'])
-                else:
+                    result = browser.view_job(arguments['job_id'])
+                elif arguments['search']:
                     filter_keywords = {}
                     for job_filter in JobSearchQuery.filters:
                         if arguments[job_filter] is not None:
                             filter_keywords[job_filter] = arguments[job_filter]
-                    result = browser.list_jobs(filters=filter_keywords, limit=int(arguments['limit']))
+                    result = browser.list_jobs(filters=filter_keywords,
+                                               limit=int(arguments['limit']) if arguments['limit'] else None)
             elif command == 'applications':
                 result = browser.list_applications(active=arguments['inactive'])
             elif command == 'interviews':
@@ -221,7 +226,7 @@ def format_as_table(data, keys, header=None, sort_by_key=None, sort_order_revers
     # Create a tuple pair of key and the associated column width for it
     key_width_pair = zip(keys, column_widths)
 
-    format = ('%-*s     ' * len(keys)).strip() + '\n'
+    format = ('%-*s   ' * len(keys)).strip() + '\n'
     formatted_data = ''
     for element in data:
         data_to_format = []

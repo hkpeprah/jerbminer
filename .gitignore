@@ -1,5 +1,7 @@
-# Python compiled code
+# Python compiled code/folders
 *.py[co]
+*.egg-info
+dist/
 
 # Emacs temporary files
 *~

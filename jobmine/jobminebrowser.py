@@ -1,3 +1,4 @@
+import os
 import re
 import json
 import urllib
@@ -9,6 +10,7 @@ import itertools
 import mechanize
 import anonbrowser
 from bs4 import BeautifulSoup
+
 try:
     from collections import OrderedDict
 except ImportError:
@@ -568,7 +570,11 @@ class CoopPrograms():
     """
     List of programs you can search on Jobmine.
     """
-    PROGRAMS = json.load(open('resources/majors.json', 'r'))
+    PROGRAMS = json.load(
+        open(
+            os.path.join(
+                os.path.dirname(__file__),
+                'resources', 'majors.json'), 'r'))
 
     @classmethod
     def get(cls, program, major = None, value=False):
