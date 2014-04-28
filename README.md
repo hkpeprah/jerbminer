@@ -9,7 +9,7 @@ Jerbminer provides a script (and GUI application) for interfacing with the Unive
 ## Usage
 `Usage: jobmine command [arguments....]`
 
-**Example**: `jobmine --search --location "United States" --disciplines "Computer Science" "Software" --term 1149` will return all the Computer Science and/or Software Engineering jobs that have been posted for Fall 2014 coop and are located in the United States.
+**Example**: `jobmine jobs --search --location "United States" --disciplines "Computer Science" "Software" --term 1149` will return all the Computer Science and/or Software Engineering jobs that have been posted for Fall 2014 coop and are located in the United States.
 
 | Command         | Description                        | Arguments                    | Description                                   |
 | --------------- | ---------------------------------- | ---------------------------- | --------------------------------------------- |
