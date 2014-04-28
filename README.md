@@ -17,6 +17,9 @@ Jerbminer provides a script (and GUI application) for interfacing with the Unive
 |                 |                                    | --delete                     | Remove the Jobmine user from the keyring.     |
 | documents       | View, upload or list documents.    | --list                       | List all documents.                           |
 |                 |                                    | --download ID {package, doc} | Download the specified package or resume.     |
+|                 |                                    | --upload PATH NAME           | Upload a new resume specified by the path.    |
+|                 |                                    | --delete ID                  | Deleted the specified document (ID >= 1)      |
+|                 |                                    | --edit PATH ID               | Reupload the specified document (ID >= 1)     |
 | shortlist       | View or shortlist jobs.            | (no argument)                | List all shortlisted jobs.                    |
 |                 |                                    | --add JOB_ID                 | Add specified job by job id to shortlist.     |
 | interviews      | Get your interviews.               | (no argument)                | Return all normal interviews.                 |

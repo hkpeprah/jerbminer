@@ -31,10 +31,11 @@ def main(*args):
     change_user.add_argument('--delete', action='store_true', default=False, help='delete the stored user')
 
     documents = subparsers.add_parser('documents', help='view/upload/list resumes')
-    documents.add_argument('--download', action='store_true', default=False, help='download specified document')
     documents.add_argument('--list', action='store_true', default=False, help='list documents')
-    documents.add_argument('id', nargs='?', help='document id number')
-    documents.add_argument('document_type', nargs='?', choices=('doc', 'package'), help='type of document')
+    documents.add_argument('--edit', nargs=2, metavar=('path', 'id'), help='reupload an existing resume')
+    documents.add_argument('--upload', nargs=2, metavar=('path', 'name'), help='upload a new resume')
+    documents.add_argument('--download', nargs=2, metavar=('id', 'document_type'), help='download specified document; types can be doc or package')
+    documents.add_argument('--delete', nargs=1, metavar='id', help='delete the specified document')
 
     shortlist = subparsers.add_parser('shortlist', help='get shortlisted jobs')
     shortlist.add_argument('--add', nargs='?', help='job identifier for a job to add to your shortlist')
@@ -90,6 +91,15 @@ def main(*args):
                 elif arguments['download']:
                     result = browser.download_document(arguments['id'], arguments['document_type'])
                     open_os(result)
+                elif arguments['delete']:
+                    browser.delete_document(int(arguments['delete'][0]))
+                    result = 'Successfully deleted the document.'
+                elif arguments['upload']:
+                    browser.upload_document(path=arguments['upload'][0], name=arguments['upload'][1])
+                    result = 'Succesfully uploaded new resume.'
+                elif arguments['edit']:
+                    browser.upload_document(path=arguments['edit'][0], existing=int(arguments['edit'][1]))
+                    result = 'Successfully reuploaded resume.'
             elif command == 'jobs':
                 if arguments['job_id']:
                     result = browser.view_job(arguments['job_id'])

@@ -3,9 +3,9 @@ import re
 import json
 import urllib
 import difflib
+import requests
 import urlparse
 import tempfile
-import requests
 import itertools
 import mechanize
 import anonbrowser
@@ -55,6 +55,27 @@ class JobmineBrowser(anonbrowser.AnonBrowser):
         self.set_handle_refresh(False)
         self.set_handle_redirect(mechanize.HTTPRedirectHandler)
 
+    def _get_tokens(self, tokens=None):
+        """
+        Get tokens from the currently selected form, if none is selected, then select
+        the first one on the page.
+
+        :tokens    A list of tokens to grab
+        :return    List of tuples
+        """
+        if tokens is None:
+            tokens = ['ICSID', 'ICStateNum']
+
+        if not hasattr(self, 'form') or self.form is None:
+            self.select_form(nr=0)
+
+        found_tokens = []
+        for token in tokens:
+            control = next((control for control in self.form.controls if control.name == token), None)
+            found_tokens.append((token, control.value))
+
+        return found_tokens
+
     def _get_jobs(self, limit=None, filters=None, extract=None):
         """
         Private method that performs the job search inquiry.  Returns a generator function to get results,
@@ -77,9 +98,8 @@ class JobmineBrowser(anonbrowser.AnonBrowser):
         # the state number.
         paginating, rows = True, []
         required_tokens = ['ICSID', 'ICStateNum']
-        for token in required_tokens:
-            control = next(control for control in self.form.controls if control.name == token)
-            query.add(token, control.value)
+        for token in self._get_tokens():
+            query.add(*token)
         self.submit()
 
         while paginating:
@@ -157,20 +177,45 @@ class JobmineBrowser(anonbrowser.AnonBrowser):
 
             return pdf
 
-    def post(self, url, data):
+    def post(self, url, data, files=None):
         """
         Posts data to the specified url.
 
         :url       The url to post to
         :data      Dictionary of form data
+        :files     Files (if any) to post
         :return    String
         """
         response = requests.post(url, data=data, cookies=self.cookie_jar, headers={
             'User-Agent': 'Mozilla/5.0'
-        })
+        }, files=files)
 
         return response.content
-        
+
+    def save(self, url, tokens=None, extra_data=None):
+        """
+        Save the current transaction.
+
+        :url           The url to save to
+        :tokens        Optional list of tokens to attach to the request
+        :extra_data    Extra dictionary of data to add to the request
+        :return        Boolean
+        """
+        if tokens is None:
+            if not hasattr(self, 'form') or self.form is None:
+                self.select_form(nr=0)
+
+            tokens = self._get_tokens()
+
+        data = dict(tokens + [('ICAction', '#ICSave')])
+        if extra_data is not None:
+            data.update(extra_data)
+        # Increase state number to trigger a change in state
+        data['ICStateNum'] = str(int(data['ICStateNum']) + 1)
+        response = self.open_novisit(url + "?{0}".format(urllib.urlencode(data))).read()
+
+        return True
+
     def authenticate(self, username, password):
         """
         Authenticate the user and login.
@@ -322,6 +367,90 @@ class JobmineBrowser(anonbrowser.AnonBrowser):
                 output.write(pdf)
 
             return tmp
+
+    def delete_document(self, document_number):
+        """
+        Deletes the specified document.  Document must exist for this to work.
+
+        :document_number    The number of the document (1 to max number of documents)
+        :return             None
+        """
+        documents = self.list_documents()
+        if document_number <= 0 or document_number > len(documents):
+            raise JobmineException('The specified document does not exist.')
+        elif len(documents) == 1:
+            raise JobmineException('Cannot delete document, atleast one must exist.')
+
+        self.open(self.FOLDER_URL.format(self.ENDPOINTS['documents']))
+        self.select_form(nr=0)
+        params = dict(self._get_tokens() + [('ICAction', 'UW_CO_PDF_WRK_UW_CO_DOC_DELETE${0}'.format(document_number - 1))])
+        response = self.open(self.geturl() + "?{0}".format(urllib.urlencode(params))).read()
+
+        if len(documents) == len(self.list_documents()):
+            # If the length is the same as before, that mean something went wrong
+            raise JobmineException('Document deletion failed.  Manually delete.')
+
+    def upload_document(self, path, name=None, existing=None):
+        """
+        Upload the document pointed to by the path as a new document on Jobmine,
+        document number should be in range(1, max number of documents)
+
+        :path        Path to the file to upload (relative or absolute)
+        :name        Optional name to give the uploaded file
+        :existing    Optional existing id to reupload an existing document
+        :return      None
+        """
+        documents = self.list_documents()
+        upload = (existing if existing else len(documents)) - 1
+        base_url = self.FOLDER_URL.format(self.ENDPOINTS['documents'])
+        soup = BeautifulSoup(self.open(base_url).read())
+        self.select_form(nr=0)
+
+        # Need two tokens for a submission; statenum and icsid
+        if existing is not None:
+            if not(existing > 0 and existing <= len(documents)):
+                raise JobmineException('The specified document does not exist.')
+        else:
+            # Create a new resume by posting to the create url; check to ensure
+            # not exceeding the number of allowed documents
+            create = 'UW_CO_PDF_WRK_UW_CO_DOC_CREATE'
+            if len(soup.findAll('a', id=create)) == 0:
+                raise JobmineException('Maximum document count reached.')
+            url, tokens = self.geturl(), self._get_tokens()
+            data = dict(tokens + [('ICAction', create)])
+
+            # Create new document, save it and check for success
+            response = self.open(self.geturl() + "0?{0}".format(urllib.urlencode(data))).read()
+            save_status = self.save(url, tokens)
+            if upload == len(self.list_documents()) - 1:
+                raise JobmineException('Document create failed.  Manually upload.')
+            else:
+                upload += 1
+                self.open(base_url)
+                self.select_form(nr=0)
+
+        # If a name exists, add it to the form
+        if name is not None:
+            description = 'UW_CO_STU_DOCS_UW_CO_DOC_DESC${0}'.format(upload)
+            self.form[description] = name
+            self.save(self.geturl(), extra_data=dict([(description, name)]))
+
+        # Navigate to the form edit page
+        params = dict(self._get_tokens() + [('ICAction', 'UW_CO_PDF_WRK_UW_CO_DOC_ADD${0}'.format(upload))])
+        response = self.open(base_url + "?{0}".format(urllib.urlencode(params))).read()
+
+        # File is uploaded as application/octet-stream
+        self.select_form(nr=0)
+        self.form.add_file(open(
+            os.path.expanduser(
+                os.path.expandvars(path)), 'rb'), 'application/pdf', os.path.split(path)[-1])
+        response = self.submit().read()
+
+        # Uploading failed if either of these exist in our response
+        if 'error' in response or 'not available' in response:
+            raise JobmineException('Document upload failed.  Manually upload.')
+
+        return True
 
     def list_rankings(self):
         """

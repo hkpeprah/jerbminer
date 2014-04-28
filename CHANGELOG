@@ -1,7 +1,10 @@
 04-27-2014
 ==========
 * Fixed deletion of default user
+* Added the ability to uplaod documents
+* Added the ability to delete documents
 * Added README
+* TODO: 'Apply', 'Rank'
 
 04-25-2014
 ==========
