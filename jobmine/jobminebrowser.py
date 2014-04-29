@@ -69,12 +69,7 @@ class JobmineBrowser(anonbrowser.AnonBrowser):
         if not hasattr(self, 'form') or self.form is None:
             self.select_form(nr=0)
 
-        found_tokens = []
-        for token in tokens:
-            control = next((control for control in self.form.controls if control.name == token), None)
-            found_tokens.append((token, control.value))
-
-        return found_tokens
+        return list((token, self.form[token]) for token in tokens)
 
     def _get_jobs(self, limit=None, filters=None, extract=None):
         """
@@ -91,18 +86,12 @@ class JobmineBrowser(anonbrowser.AnonBrowser):
 
         regex = re.compile(r'.*trUW_CO_JOBRES_VW\$[0-9]+_row[0-9]+')
         response = self.open(self.FOLDER_URL.format(self.ENDPOINTS['jobs'])).read()
-        query = JobSearchQuery()
+        query, rows = JobSearchQuery(), []
 
-        self.select_form(nr=0)
-        # These tokens we have to grab from the page as they change, pagination requires
-        # the state number.
-        paginating, rows = True, []
-        required_tokens = ['ICSID', 'ICStateNum']
         for token in self._get_tokens():
             query.add(*token)
-        self.submit()
 
-        while paginating:
+        while True:
             form_post_url = query.make_query(self.geturl(), **filters)
             response = self.open_novisit(form_post_url).read()
             soup = BeautifulSoup(response)
@@ -110,18 +99,18 @@ class JobmineBrowser(anonbrowser.AnonBrowser):
             # Need the headers in order to construct the dictionary so find the headers
             # relative to the rows
             body = list(soup.findAll('tr', id=regex))[0].parent.parent
-            headers = map(lambda tag: tag.text.strip(), list(body.findAll('th')))
+            headers = map(lambda tag: tag.text.encode('ascii', 'ignore').strip(),
+                          list(body.findAll('th')))
 
             # Find the rows matching the regex and and get the text
-            found = list(map(lambda tag: tag.text.strip(), row.findAll('td')) for \
+            found = list(map(lambda tag: tag.text.encode('ascii', 'ignore').strip(), row.findAll('td')) for \
                          row in soup.findAll('tr') if isinstance(row.attrs.get('id', None), basestring) and \
                          regex.match(row.attrs.get('id')))
 
-            duplicates = not next((row for row in found if row not in rows), False)
-            if duplicates or len(found) == 0:
+            if len(found) == 0 or found[0] in rows:
                 # If no results or if it matches the last found row, pagination
                 # has finished.
-                raise StopIteration
+                break
 
             jobs = map(lambda row: OrderedDict(zip(headers, row)), found)
             if extract:
@@ -130,8 +119,7 @@ class JobmineBrowser(anonbrowser.AnonBrowser):
                     query.row = len(rows) + jobs.index(filtered[0])
                     yield filtered[0], query
                     break
-                query.paginate()
-                continue
+                rows += found
             elif isinstance(limit, int) and len(found) + len(rows) >= limit:
                 limit -= len(rows)
                 yield (rows + jobs[:limit])
@@ -139,10 +127,11 @@ class JobmineBrowser(anonbrowser.AnonBrowser):
             elif jobs[0]['Job Title'] == 'No Matches Found':
                 return
                 yield []
+            else:
+                rows += found
+                yield jobs
 
-            rows += found
             query.paginate()
-            yield jobs
 
         raise StopIteration
 
@@ -157,22 +146,19 @@ class JobmineBrowser(anonbrowser.AnonBrowser):
         """
         ic_action = 'UW_CO_PDF_LINKS_UW_CO_{0}_VIEW${1}'
         download_url = self.FOLDER_URL.format(self.ENDPOINTS['documents'])
-        document = next((index for index, document in enumerate(self.list_documents()) if document['Document Number'] == str(id)), None)
+        if isinstance(id, basestring):
+            id = int(id)
 
-        if document is not None:
+        if id > 0 and id <= len(self.list_documents()):
             # Generates the page with the JS that generates the download url; server-sided
             # generation
-            download_url += "?ICAction={0}".format(ic_action.format(document_type.upper(), document))
+            download_url += "?ICAction={0}".format(ic_action.format(document_type.upper(), str(id - 1)))
             response = self.open_novisit(download_url).read()
 
-            query, index = '', response.index('cmd=viewattach')
-            while response[index] not in '\'"?,()':
-                query += response[index]
-                index += 1
-
             # Fetch the actual document from the download command url
+            query = re.search(r'(cmd=viewattach[^\'"\?,\(\)]+)', response).group(0)
             response = self.open_novisit(self.CMD_URL + '?{0}'.format(query)).read()
-            # Since this page sets a refresh header, it's not the actual pdf yet..
+            # Since this page sets an improper refresh header, need to follow the header
             pdf = self.open_novisit(response.split('\n')[3]).read()
 
             return pdf
@@ -201,12 +187,7 @@ class JobmineBrowser(anonbrowser.AnonBrowser):
         :extra_data    Extra dictionary of data to add to the request
         :return        Boolean
         """
-        if tokens is None:
-            if not hasattr(self, 'form') or self.form is None:
-                self.select_form(nr=0)
-
-            tokens = self._get_tokens()
-
+        tokens = self._get_tokens() if tokens is None else tokens
         data = dict(tokens + [('ICAction', '#ICSave')])
         if extra_data is not None:
             data.update(extra_data)
@@ -214,7 +195,7 @@ class JobmineBrowser(anonbrowser.AnonBrowser):
         data['ICStateNum'] = str(int(data['ICStateNum']) + 1)
         response = self.open_novisit(url + "?{0}".format(urllib.urlencode(data))).read()
 
-        return True
+        return ('error' in response or 'not available' in response)
 
     def authenticate(self, username, password):
         """
@@ -225,17 +206,17 @@ class JobmineBrowser(anonbrowser.AnonBrowser):
         :return      Boolean
         """
         login_url = self.BASE_URL.format(self.ENDPOINTS['*'], timeout=30.0)
-        response = self.open(login_url)
-        # ID/name of form fields are userid/pwd respectively for
-        # username, password combination
-        form_nr = 0
+        form_nr, response = 0, self.open(login_url)
         while True:
+            # ID/name of form fields are userid/pwd respectively for
+            # username, password combination
             try:
+                # First form is not always the login form
                 self.select_form(nr=form_nr)
                 form_nr += 1
-                self.form['userid'] = username
-                self.form['pwd'] = password
+                self.form['userid'], self.form['pwd'] = username, password
                 self.submit()
+                self.save_cookies()
                 break
             except mechanize._form.ControlNotFoundError:
                 # Not the right form
@@ -247,7 +228,6 @@ class JobmineBrowser(anonbrowser.AnonBrowser):
         if 'errorCode=999' in self.geturl():
             raise JobmineException('Jobmine is currently closed.')
 
-        self.save_cookies()
         return True
 
     def parse(self, endpoint, regex):
@@ -260,13 +240,12 @@ class JobmineBrowser(anonbrowser.AnonBrowser):
         """
         regex = re.compile(regex)
         url = self.FOLDER_URL.format(self.ENDPOINTS[endpoint])
-        response = self.open(url).read()
-        soup = BeautifulSoup(response)
+        soup = BeautifulSoup(self.open(url).read())
 
         # Find the rows matching the regex and and get the text
-        rows = list(map(lambda tag: tag.text.strip() if len(tag.findAll('input')) == 0 else \
-                        tag.findAll('input')[0]['value'], row.findAll('td')) for \
-                        row in soup.findAll('tr', id=regex))
+        rows = list(map(lambda tag: tag.text.encode('ascii', 'ignore').strip() if \
+                        len(tag.findAll('input')) == 0 else tag.findAll('input')[0]['value'],
+                        row.findAll('td')) for row in soup.findAll('tr', id=regex))
 
         if len(rows) == 0:
             return []
@@ -274,16 +253,24 @@ class JobmineBrowser(anonbrowser.AnonBrowser):
         # Need the headers in order to construct the dictionary so find the headers
         # relative to the rows
         body = list(soup.findAll('tr', id=regex))[0].parent.parent
-        headers = map(lambda tag: tag.text.strip(), list(body.findAll('th')))
+        headers = map(lambda tag: tag.text.encode('ascii', 'ignore').strip(),
+                      list(body.findAll('th')))
 
         # Find indices that are null; indices that are filled with empty strings as
         # Jobmine creates table rows with empty cells
-        null_indices = list(index for index, text in enumerate(headers) if len(text) == 0)
-        headers = list(text for index, text in enumerate(headers) if index not in null_indices)
-        rows = list(list(text for index, text in enumerate(row) if index not in null_indices) for row in rows)
+        old_rows, rows = rows, [[] for _ in range(0, len(rows))]
+        for index, header in zip(range(0, len(headers)), headers[:]):
+            if index == 0:
+                headers = []
+            if len(header) == 0:
+                continue # Null index
+            headers.append(header)
+            for j in range(0, len(rows)):
+                rows[j].append(old_rows[j][index])
 
         if len(rows[0]) == 0:
             return []
+
         return map(lambda row: OrderedDict(zip(headers, row)), rows)
 
     def list_shortlist(self):
@@ -292,8 +279,7 @@ class JobmineBrowser(anonbrowser.AnonBrowser):
 
         :return    List of dictionaries
         """
-        short_list = self.parse('shortlist', r'trUW_CO_STUJOBLST.*')
-        return short_list
+        return self.parse('shortlist', r'trUW_CO_STUJOBLST.*')
 
     def list_applications(self, active=False):
         """
@@ -301,9 +287,8 @@ class JobmineBrowser(anonbrowser.AnonBrowser):
 
         :return    List of dictionaries
         """
-        regex = 'tr.*UW_CO_APPS{0}.*'.format('V\$' if active else '_VW2')
-        applications = self.parse('applications', regex)
-        return applications
+        return self.parse('applications',
+                          'tr.*UW_CO_APPS%s.*' % ('V\$' if active else '_VW2'))
 
     def list_interviews(self, interview=None):
         """
@@ -324,7 +309,8 @@ class JobmineBrowser(anonbrowser.AnonBrowser):
         interviews = self.parse('interviews', regex)
         # Filter to ensure there are actually interviews as Jobmine implicitly returns
         # a row of blank interviews.
-        interviews = filter(lambda interview: len(list(itertools.chain(*interview.values()))) > 0, interviews)
+        interviews = filter(lambda interview: len(list(itertools.chain(*interview.values()))) > 0,
+                            interviews)
         return interviews
 
     def list_profile(self):
@@ -333,8 +319,7 @@ class JobmineBrowser(anonbrowser.AnonBrowser):
 
         :return    List of dictionaries
         """
-        profile = self.parse('profile', r'trUW_CO_STDTERMVW.*')
-        return profile
+        return self.parse('profile', r'trUW_CO_STDTERMVW.*')
 
     def list_documents(self):
         """
@@ -342,8 +327,7 @@ class JobmineBrowser(anonbrowser.AnonBrowser):
 
         :return        List of dictionaries
         """
-        resumes = self.parse('documents', r'trUW_CO_STU_DOCS.*')
-        return resumes
+        return self.parse('documents', r'trUW_CO_STU_DOCS.*')
 
     def download_document(self, id, document_type=None):
         """
@@ -382,8 +366,8 @@ class JobmineBrowser(anonbrowser.AnonBrowser):
             raise JobmineException('Cannot delete document, atleast one must exist.')
 
         self.open(self.FOLDER_URL.format(self.ENDPOINTS['documents']))
-        self.select_form(nr=0)
-        params = dict(self._get_tokens() + [('ICAction', 'UW_CO_PDF_WRK_UW_CO_DOC_DELETE${0}'.format(document_number - 1))])
+        params = dict(self._get_tokens())
+        params['ICAction'] = 'UW_CO_PDF_WRK_UW_CO_DOC_DELETE${0}'.format(document_number - 1)
         response = self.open(self.geturl() + "?{0}".format(urllib.urlencode(params))).read()
 
         if len(documents) == len(self.list_documents()):
@@ -422,7 +406,7 @@ class JobmineBrowser(anonbrowser.AnonBrowser):
             # Create new document, save it and check for success
             response = self.open(self.geturl() + "0?{0}".format(urllib.urlencode(data))).read()
             save_status = self.save(url, tokens)
-            if upload == len(self.list_documents()) - 1:
+            if save_status and upload == len(self.list_documents()) - 1:
                 raise JobmineException('Document create failed.  Manually upload.')
             else:
                 upload += 1
@@ -436,7 +420,8 @@ class JobmineBrowser(anonbrowser.AnonBrowser):
             self.save(self.geturl(), extra_data=dict([(description, name)]))
 
         # Navigate to the form edit page
-        params = dict(self._get_tokens() + [('ICAction', 'UW_CO_PDF_WRK_UW_CO_DOC_ADD${0}'.format(upload))])
+        params = dict(self._get_tokens())
+        params['ICAction'] = 'UW_CO_PDF_WRK_UW_CO_DOC_ADD${0}'.format(upload)
         response = self.open(base_url + "?{0}".format(urllib.urlencode(params))).read()
 
         # File is uploaded as application/octet-stream
@@ -450,16 +435,13 @@ class JobmineBrowser(anonbrowser.AnonBrowser):
         if 'error' in response or 'not available' in response:
             raise JobmineException('Document upload failed.  Manually upload.')
 
-        return True
-
     def list_rankings(self):
         """
         List the user's job rankings.
 
         :return    String
         """
-        rankings = self.parse('rankings', r'trUW_CO_STU_RNK.*')
-        return rankings
+        return self.parse('rankings', r'trUW_CO_STU_RNK.*')
 
     def view_job(self, job_id):
         """
@@ -470,39 +452,32 @@ class JobmineBrowser(anonbrowser.AnonBrowser):
         :return    String
         """
         url = self.FOLDER_URL.format(self.ENDPOINTS['details']) + "?UW_CO_JOB_ID={0}".format(job_id)
-        response = self.open_novisit(url).read()
-        soup = BeautifulSoup(response)
+        soup = BeautifulSoup(self.open_novisit(url).read())
         content = soup.findAll('div', id='PAGECONTAINER')
 
         # Do some analyzation here to figure out what peices of content belong to what
         # from the raw string.
         raw = re.sub(r'\s\s+', '\n', content[0].text)
         information, description = raw.split('Job Description')
-        information = information.split('\n')
-        description = description.replace(u'\xa0', u' ').replace('\r', '\n').strip()
 
-        # Parse the information on the page
-        job_attributes = OrderedDict()
-        while len(information) > 0:
-            key, attributes = information.pop(0), []
-            if ':' not in key:
-                continue
-            else:
-                while len(information) > 0:
-                    value = information.pop(0).replace(u'\xa0', u' ').strip()
-                    if ':' in value:
-                        information.insert(0, value)
-                        break
-                    elif len(value) > 0:
-                        attributes.append(value)
+        # Strip out empty whitespace lines and replace return carriages
+        description = description.encode('ascii', 'ignore').replace('\r', '\n')
+        description = '\n'.join(filter(lambda s: re.match(r'[\-_0-9A-Za-z]+', s),
+                                       description.split('\n')))
 
-            if len(attributes) == 0:
-                job_attributes[key] = ""
-            else:
-                job_attributes[key] = attributes if len(attributes) > 1 else attributes[0]
-
-        job_attributes['Description'] = description
-        return job_attributes
+        # Parse the information on the page by finding key-value pairs denoted by headers that
+        # contain a colon
+        regex = re.compile(r"""
+            ([\s\w\-,\#]+        # matches a value for the field
+             :                   # if colon, this is a key
+             (?:\n+)             # non-capturing newline
+            [\w\s\-,\#]+         # matches a value for the field
+            (?:\n+))             # non-matching newline
+        """, re.VERBOSE)
+        job_information = OrderedDict((key.strip(), val.strip()) for (key, val) in \
+                                      map(lambda d: d.split(':'), re.findall(regex, information)))
+        job_information['Description'] = description
+        return job_information
 
     def add_to_shortlist(self, job_id, filters=None):
         """
@@ -523,8 +498,8 @@ class JobmineBrowser(anonbrowser.AnonBrowser):
         if job is not None and job['Short List'] != 'On Short List':
             url = self.FOLDER_URL.format(self.ENDPOINTS['jobs']) + \
                   '?ICAction=UW_CO_SLIST_HL${0}&ICSID={1}&ICStateNum={2}'.format(query.row,
-                                                                  query.get('ICSID'),
-                                                                  str(int(query.get('ICStateNum')) + 1))
+                                                                                 query.get('ICSID'),
+                                                                                 str(int(query.get('ICStateNum')) + 1))
             response = self.open_novisit(url).read()
             return not('This page is no longer available' in response)
 
@@ -602,6 +577,7 @@ class JobSearchQuery():
 
     def readable(field):
         """
+        Wraps a query param to provide a readable name for the field.
         """
         def wrap(function):
             def wrapped_function(instance, *args):
@@ -696,6 +672,13 @@ class JobSearchQuery():
         url = url + '?{0}'.format(urllib.urlencode(serialized))
 
         return url
+
+
+class Jobmine(JobmineBrowser):
+    """
+    Reference to the browser under the name of Jobmine.
+    """
+    pass
 
 
 class CoopPrograms():

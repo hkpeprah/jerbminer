@@ -9,13 +9,17 @@ def format(result):
         # Implicit assumping that allow lists returned are list of dictionaries
         # to be printed in a table.
         if len(result) == 0:
-            print "No results found."
+            return "No results found."
         else:
-            print format_as_table(result, result[0].keys(), result[0].keys()).rstrip()
+            return format_as_table(result,
+                                   result[0].keys(),
+                                   result[0].keys())
     elif isinstance(result, dict):
-        print format_as(result)
+        return format_as(result)
+    elif isinstance(result, bool):
+        return 'Success' if result else 'Failed'
     else:
-        print result
+        return result
 
 
 def format_as(data, keys=None, sort_by_key=None):
@@ -31,16 +35,15 @@ def format_as(data, keys=None, sort_by_key=None):
     items = data.items()
 
     if keys:
-        items = list([(key, value) for (key, value) in item if key in keys] for item in items)
+        items = filter(lambda item: item[0] in keys, items)
 
     if sort_by_key:
-        items = list(sorted(item, lambda x: x[0]) for item in items)
+        items = sorted(items, lambda x: x[0])
 
     for index, (key, value) in enumerate(items):
-        if isinstance(value, list):
-            value = ", ".join(value)
-        output += "{0}:\n{1}".format(key.title().replace(':', ''), value)
-        output += "\n" if index == len(data) - 1 else "\n\n"
+        output += "%s:\n%s%s" % (key.title(),
+                                 value,
+                                 " " if index == len(data) - 1 else "\n\n")
 
     return output
 
@@ -49,7 +52,8 @@ def format_as_table(data, keys, header=None, sort_by_key=None, sort_order_revers
     """Takes a list of dictionaries, formats the data, and returns
     the formatted data as a text table.
 
-    Source: http://www.calazan.com/python-function-for-displaying-a-list-of-dictionaries-in-table-format/
+    Source:
+        http://www.calazan.com/python-function-for-displaying-a-list-of-dictionaries-in-table-format/
 
     Required Parameters:
         data - Data to process (list of dictionaries). (Type: List)
@@ -101,4 +105,4 @@ def format_as_table(data, keys, header=None, sort_by_key=None, sort_order_revers
             data_to_format.append(pair[1])
             data_to_format.append(element[pair[0]])
         formatted_data += (format % tuple(data_to_format))
-    return formatted_data
+    return formatted_data.rstrip()

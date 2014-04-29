@@ -2,7 +2,6 @@ import sys
 import json
 import getpass
 import argparse
-import subprocess
 from utils import open_os
 from formatters import format
 from operator import itemgetter
@@ -10,25 +9,20 @@ from jobminebrowser import JobmineBrowser, JobmineException, JobSearchQuery
 from key import store_user_info, get_user_info, remove_user
 
 
-def main(*args):
+def parse_arguments(args):
     """
-    Command-line main interface for the Jobmine application.  Runs the application's parser and
-    calls the JobmineBrowser accordingly.
-
-    :args      List of command-line arguments, defaults to sys.argv if omitted
-    :return    None
+    Creates the subparser for the jobmine-cli application and parses the command-line
+    arguments.
     """
-    if len(args) == 0:
-        args = sys.argv[1:]
-
     # Create and add the subparsers for the supported Jobmine methods;
     # parse the arguments based on the subparser
     parser = argparse.ArgumentParser(description='Command-line interface for the Jobmine python application.',
                                      prog='jobmine', epilog='Who would make such a thing?')
     subparsers = parser.add_subparsers(help='Sub-command menu', dest='command')
 
-    change_user = subparsers.add_parser('change_user', help='change the default user')
-    change_user.add_argument('--delete', action='store_true', default=False, help='delete the stored user')
+    user = subparsers.add_parser('user', help='jobmine cli user utilities')
+    user.add_argument('--delete', action='store_true', default=False, help='delete the stored user')
+    user.add_argument('--change', action='store_true', default=False, help='change the default user')
 
     documents = subparsers.add_parser('documents', help='view/upload/list resumes')
     documents.add_argument('--list', action='store_true', default=False, help='list documents')
@@ -39,6 +33,8 @@ def main(*args):
 
     shortlist = subparsers.add_parser('shortlist', help='get shortlisted jobs')
     shortlist.add_argument('--add', nargs='?', help='job identifier for a job to add to your shortlist')
+    shortlist.add_argument('--status', nargs='?', help='status of the job', default='posted',
+                           choices=('approved', 'available', 'cancelled', 'posted'))
 
     interviews = subparsers.add_parser('interviews', help='get interviews')
     interviews.add_argument('interview', choices=('group', 'special', 'cancelled', 'normal'), default='normal',
@@ -62,68 +58,76 @@ def main(*args):
     search.add_argument('--disciplines', help='up to three programs for the jobs', nargs='*')
     search.add_argument('--limit', help='limit the number of results returned', default=None)
 
-    arguments = vars(parser.parse_args(args))
-    if arguments['command'] == 'change_user':
-        # Only non-jobmine command; using the keypass set or delete
-        # the user being used; only one user is allowed at a time.
-        if arguments['delete']:
+    opts = vars(parser.parse_args(args))
+    if opts['command'] == 'user':
+        if opts['delete']:
             username, _ = get_user_info()
             remove_user(username)
-            print 'Deleted user %s' % username
-        else:
+            return 'Deleted user %s' % username
+        elif opts['change']:
             username = raw_input("Username: ")
             store_user_info(username, getpass.getpass("Password: "))
-            print 'Default user is now %s' % username
+            return 'Default user is now %s' % username
+        else:
+            return user.format_help() 
     else:
         browser = JobmineBrowser()
         username, password = get_user_info()
 
         if username is None or password is None:
-            print "No user data found.  Have you ran 'change_user'?"
-            exit(1)
+            raise JobmineException("No user found.  Have you run 'user --add'?")
 
-        try:
-            browser.authenticate(username, password)
-            command, result = arguments['command'], None
-            if command == 'documents':
-                if arguments['list']:
-                    result = browser.list_documents()
-                elif arguments['download']:
-                    result = browser.download_document(arguments['id'], arguments['document_type'])
-                    open_os(result)
-                elif arguments['delete']:
-                    browser.delete_document(int(arguments['delete'][0]))
-                    result = 'Successfully deleted the document.'
-                elif arguments['upload']:
-                    browser.upload_document(path=arguments['upload'][0], name=arguments['upload'][1])
-                    result = 'Succesfully uploaded new resume.'
-                elif arguments['edit']:
-                    browser.upload_document(path=arguments['edit'][0], existing=int(arguments['edit'][1]))
-                    result = 'Successfully reuploaded resume.'
-            elif command == 'jobs':
-                if arguments['job_id']:
-                    result = browser.view_job(arguments['job_id'])
-                elif arguments['search']:
-                    filter_keywords = {}
-                    for job_filter in JobSearchQuery.filters:
-                        if arguments[job_filter] is not None:
-                            filter_keywords[job_filter] = arguments[job_filter]
-                    result = browser.list_jobs(filters=filter_keywords,
-                                               limit=int(arguments['limit']) if arguments['limit'] else None)
-            elif command == 'applications':
-                result = browser.list_applications(active=arguments['inactive'])
-            elif command == 'interviews':
-                result = browser.list_interviews(interview=arguments['interview'])
-            elif command == 'shortlist':
-                if arguments['add']:
-                    result = browser.add_to_shortlist(arguments['add'])
-                else:
-                    result = browser.list_shortlist()
-            # Print out the result formatted based on the type of data returned
-            format(result)
-        except JobmineException as e:
-            # Jobmine exception usually means that Jobmine is down, format the string
-            # in a printable manner for the user
-            print "Error: %s" % e
+        browser.authenticate(username, password)
+        if opts['command'] == 'documents':
+            if opts['list']:
+                return browser.list_documents()
+            elif opts['download']:
+                path = browser.download_document(*opts['download'])
+                open_os(path)
+                return path
+            elif opts['delete']:
+                return browser.delete_document(int(opts['delete'][0]))
+            elif opts['upload']:
+                return browser.upload_document(path=opts['upload'][0],
+                                               name=opts['upload'][1])
+            elif opts['edit']:
+                return browser.upload_document(path=opts['edit'][0],
+                                               existing=int(opts['edit'][1]))
+        elif opts['command'] == 'applications':
+            return browser.list_applications(active=opts['inactive'])
+        elif opts['command'] == 'interviews':
+            return browser.list_interviews(interview=opts['interview'])
+        elif opts['command'] == 'shortlist':
+            if opts['add']:
+                return browser.add_to_shortlist(opts['add'], filters={
+                    'status': opts['status']
+                })
+            return browser.list_shortlist()
+        elif opts['command'] == 'jobs':
+            if opts['job_id']:
+                return browser.view_job(opts['job_id'])
+            elif opts['search']:
+                filters = dict((query, opts[query]) for query in JobSearchQuery.filters if \
+                               opts[query] is not None)
+                limit = int(opts['limit']) if opts['limit'] else None
+                return browser.list_jobs(filters=filters,
+                                          limit=limit)
+        else:
+            return parser.format_help() 
 
-    return None
+
+def main(*args):
+    """
+    Command-line main interface for the Jobmine application.  Runs the application's parser and
+    calls the JobmineBrowser accordingly.
+
+    :args      List of command-line arguments, defaults to sys.argv if omitted
+    :return    None
+    """
+    try:
+        args = sys.argv[1:] if len(args) == 0 else args
+        result = parse_arguments(args)
+        print format(result if result is not None else 'Success')
+    except JobmineException as e:
+        print 'Error: %s' % e
+        exit(1)

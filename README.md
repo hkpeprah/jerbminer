@@ -13,7 +13,7 @@ Jerbminer provides a script (and GUI application) for interfacing with the Unive
 
 | Command         | Description                        | Arguments                    | Description                                   |
 | --------------- | ---------------------------------- | ---------------------------- | --------------------------------------------- |
-| change_user     | Change current Jobmine user.       | (no argument)                | Change the Jobmine user in the keyring.       |
+| user            | Change current Jobmine user.       | --change                     | Change the Jobmine user in the keyring.       |
 |                 |                                    | --delete                     | Remove the Jobmine user from the keyring.     |
 | documents       | View, upload or list documents.    | --list                       | List all documents.                           |
 |                 |                                    | --download ID {package, doc} | Download the specified package or resume.     |
@@ -22,6 +22,7 @@ Jerbminer provides a script (and GUI application) for interfacing with the Unive
 |                 |                                    | --edit PATH ID               | Reupload the specified document (ID >= 1)     |
 | shortlist       | View or shortlist jobs.            | (no argument)                | List all shortlisted jobs.                    |
 |                 |                                    | --add JOB_ID                 | Add specified job by job id to shortlist.     |
+|                 |                                    | --status {approved, .. }     | Status of the job (if not posted).            |
 | interviews      | Get your interviews.               | (no argument)                | Return all normal interviews.                 |
 |                 |                                    | {group, special, cancelled}  | Return group/special/cancelled interviews.    |
 | applications    | List your applications.            | (no argument)                | Return list of active applications.           |
