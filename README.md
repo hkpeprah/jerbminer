@@ -6,6 +6,9 @@ Jerbminer provides a script (and GUI application) for interfacing with the Unive
 * **Local**: `pip install Jerbminer.tar.gz`
 * **Global**: `sudo pip install Jerbminer.tar.gz`
 
+## To-dos
+Currently supports all operations but removing from shortlist, applying, and ranking.  Descriptions are also broken.  Otherwise, it supports doing most things.  If there is a feature you want, request it in the [issues page](https://github.com/hkpeprah/jerbminer/issues).
+
 ## Usage
 `Usage: jobmine command [arguments....]`
 
@@ -18,8 +21,8 @@ Jerbminer provides a script (and GUI application) for interfacing with the Unive
 | documents       | View, upload or list documents.    | --list                       | List all documents.                           |
 |                 |                                    | --download ID {package, doc} | Download the specified package or resume.     |
 |                 |                                    | --upload PATH NAME           | Upload a new resume specified by the path.    |
-|                 |                                    | --delete ID                  | Deleted the specified document (`ID >= 1`)      |
-|                 |                                    | --edit PATH ID               | Reupload the specified document (`ID >= 1`)     |
+|                 |                                    | --delete ID                  | Deleted the specified document (`ID >= 1`)    |
+|                 |                                    | --edit PATH ID               | Reupload the specified document (`ID >= 1`)   |
 | shortlist       | View or shortlist jobs.            | (no argument)                | List all shortlisted jobs.                    |
 |                 |                                    | --add JOB_ID                 | Add specified job by job id to shortlist.     |
 |                 |                                    | --status {approved, .. }     | Status of the job (if not posted).            |
