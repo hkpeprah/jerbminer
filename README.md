@@ -1,6 +1,6 @@
 Jerbminer (Jobmine Miner)
 =========================
-Jerbminer provides a script (and GUI application) for interfacing with the University of Waterloo's Jobmine system.  *Jobmine* is a web application developed by the University of Waterloo to help students with the coop process.  This script/application is in no way affiliated with the University of Waterloo and is the side project of one student.
+Jerbminer provides a script (and GUI application) for interfacing with the University of Waterloo's Jobmine system.  *Jobmine* is a web application developed by the University of Waterloo to help students with the coop process.  This script/application is in no way affiliated with the University of Waterloo and is the side project of one student.  Supported majors are listed in [majors.json](https://github.com/hkpeprah/jerbminer/blob/master/jobmine/resources/majors.json).
 
 ## Installation
 * **Local**: `pip install Jerbminer.tar.gz`
@@ -18,8 +18,8 @@ Jerbminer provides a script (and GUI application) for interfacing with the Unive
 | documents       | View, upload or list documents.    | --list                       | List all documents.                           |
 |                 |                                    | --download ID {package, doc} | Download the specified package or resume.     |
 |                 |                                    | --upload PATH NAME           | Upload a new resume specified by the path.    |
-|                 |                                    | --delete ID                  | Deleted the specified document (ID >= 1)      |
-|                 |                                    | --edit PATH ID               | Reupload the specified document (ID >= 1)     |
+|                 |                                    | --delete ID                  | Deleted the specified document (`ID >= 1`)      |
+|                 |                                    | --edit PATH ID               | Reupload the specified document (`ID >= 1`)     |
 | shortlist       | View or shortlist jobs.            | (no argument)                | List all shortlisted jobs.                    |
 |                 |                                    | --add JOB_ID                 | Add specified job by job id to shortlist.     |
 |                 |                                    | --status {approved, .. }     | Status of the job (if not posted).            |
@@ -33,9 +33,9 @@ Jerbminer provides a script (and GUI application) for interfacing with the Unive
 |                 |                                    | --employer EMPLOYER          | Name of the employer.                         |
 |                 |                                    | --title TITLE                | Job title.                                    |
 |                 |                                    | --disciplines DISCIPLINES... | Up to three programs to filter on.            |
-|                 |                                    | --status {approved, ...}     | Status of the job; approved/posted/available. |
-|                 |                                    | --levels {jr, sr, int, ....  | Level of the position, such as sr for senior. |
-|                 |                                    | --term TERM                  | The term to search for, like 1149 / Fall 2014 |
+|                 |                                    | --status {approved, ...}     | Status of the job; `approved`, `posted`, `available`, `cancelled`. |
+|                 |                                    | --levels {jr, sr, int, ....  | Level of the position, such as `sr` for senior. |
+|                 |                                    | --term TERM                  | The term to search for, like `1149` / `Fall 2014` |
 |                 |                                    | --limit LIMIT                | Number of results to limit the search to.     |
 
 ## Package
