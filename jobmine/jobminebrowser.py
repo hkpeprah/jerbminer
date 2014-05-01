@@ -505,6 +505,30 @@ class JobmineBrowser(anonbrowser.AnonBrowser):
 
         return False
 
+    def remove_from_shortlist(self, job_id):
+        """
+        Removes the job with the specified job id from the user's shortlist.
+
+        :job_id    String, the job identifier
+        :return    Boolean
+        """
+        remove = 'UW_CO_STUJOBLST$delete${0}$$0'
+        shortlisted_jobs = self.list_shortlist()
+        for index, job in enumerate(shortlisted_jobs):
+            if job['Job Identifier'] == job_id:
+                tokens = dict(self._get_tokens())
+                url = self.FOLDER_URL.format(self.ENDPOINTS['shortlist']) + \
+                      '?ICAction=UW_CO_STUJOBLST$delete${0}$$0&ICSID={1}&ICStateNum={2}'.format(index,
+                                                                                                tokens['ICSID'],
+                                                                                                tokens['ICStateNum'])
+                response = self.open_novisit(url).read()
+                self.save(self.geturl())
+                if len(self.list_shortlist()) == len(shortlisted_jobs):
+                    raise JobmineException('Something went wrong, manually remove.')
+                return True
+
+        return False
+
     def list_jobs(self, limit=None, filters=None):
         """
         Search and list jobs.  By passing in key word arguments, the user can specify how

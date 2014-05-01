@@ -32,8 +32,9 @@ def parse_arguments(args):
     documents.add_argument('--delete', nargs=1, metavar='id', help='delete the specified document')
 
     shortlist = subparsers.add_parser('shortlist', help='get shortlisted jobs')
-    shortlist.add_argument('--add', nargs='?', help='job identifier for a job to add to your shortlist')
-    shortlist.add_argument('--status', nargs='?', help='status of the job', default='posted',
+    shortlist.add_argument('--add', nargs=1, metavar='job_id', help='pass job identifier for a job to add to your shortlist')
+    shortlist.add_argument('--remove', nargs=1, metavar='job_id', help='pass job identifier for a job to remove from your shortlist')
+    shortlist.add_argument('--status', nargs='?', metavar='status', help='status of the job', default='posted',
                            choices=('approved', 'available', 'cancelled', 'posted'))
 
     interviews = subparsers.add_parser('interviews', help='get interviews')
@@ -99,9 +100,11 @@ def parse_arguments(args):
             return browser.list_interviews(interview=opts['interview'])
         elif opts['command'] == 'shortlist':
             if opts['add']:
-                return browser.add_to_shortlist(opts['add'], filters={
+                return browser.add_to_shortlist(opts['add'][0], filters={
                     'status': opts['status']
                 })
+            elif opts['remove']:
+                return browser.remove_from_shortlist(opts['remove'][0])
             return browser.list_shortlist()
         elif opts['command'] == 'jobs':
             if opts['job_id']:

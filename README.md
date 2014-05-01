@@ -25,6 +25,7 @@ Currently supports all operations but removing from shortlist, applying, and ran
 |                 |                                    | --edit PATH ID               | Reupload the specified document (`ID >= 1`)   |
 | shortlist       | View or shortlist jobs.            | (no argument)                | List all shortlisted jobs.                    |
 |                 |                                    | --add JOB_ID                 | Add specified job by job id to shortlist.     |
+|                 |                                    | --remove JOB_ID              | Remove specified job by job id from shortlist.|
 |                 |                                    | --status {approved, .. }     | Status of the job (if not posted).            |
 | interviews      | Get your interviews.               | (no argument)                | Return all normal interviews.                 |
 |                 |                                    | {group, special, cancelled}  | Return group/special/cancelled interviews.    |
