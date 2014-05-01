@@ -32,6 +32,8 @@ class JobmineBrowser(anonbrowser.AnonBrowser):
     BASE_URL = 'https://jobmine.ccol.uwaterloo.ca/psp/SS/EMPLOYEE/WORK/{0}'
     FOLDER_URL = 'https://jobmine.ccol.uwaterloo.ca/psc/SS/EMPLOYEE/WORK/c/UW_CO_STUDENTS.{0}.GBL'
     CMD_URL = 'https://jobmine.ccol.uwaterloo.ca/psc/SS/'
+    DEFAULT_URL = 'https://jobmine.ccol.uwaterloo.ca/psp/SS/EMPLOYEE/WORK/h/?tab=DEFAULT'
+    LOGIN_URL = 'https://jobmine.ccol.uwaterloo.ca/psp/SS/?cmd=login'
     ENDPOINTS = {
         '*': "",
         'nav': "h/?tab=DEFAULT",
@@ -163,21 +165,6 @@ class JobmineBrowser(anonbrowser.AnonBrowser):
 
             return pdf
 
-    def post(self, url, data, files=None):
-        """
-        Posts data to the specified url.
-
-        :url       The url to post to
-        :data      Dictionary of form data
-        :files     Files (if any) to post
-        :return    String
-        """
-        response = requests.post(url, data=data, cookies=self.cookie_jar, headers={
-            'User-Agent': 'Mozilla/5.0'
-        }, files=files)
-
-        return response.content
-
     def save(self, url, tokens=None, extra_data=None):
         """
         Save the current transaction.
@@ -205,30 +192,51 @@ class JobmineBrowser(anonbrowser.AnonBrowser):
         :password    String, user's Quest password
         :return      Boolean
         """
-        login_url = self.BASE_URL.format(self.ENDPOINTS['*'], timeout=30.0)
-        form_nr, response = 0, self.open(login_url)
-        while True:
-            # ID/name of form fields are userid/pwd respectively for
-            # username, password combination
-            try:
-                # First form is not always the login form
-                self.select_form(nr=form_nr)
-                form_nr += 1
-                self.form['userid'], self.form['pwd'] = username, password
-                self.submit()
-                self.save_cookies()
-                break
-            except mechanize._form.ControlNotFoundError:
-                # Not the right form
-                continue
-            except mechanize._mechanize.FormNotFoundError:
-                # No more forms available on page, authentication failed
-                return False
+        form_nr, response = 0, self.open(self.LOGIN_URL)
+        # ID/name of form fields are userid/pwd respectively for
+        # username, password combination
+        form_nr = next((index for index, form in enumerate(self.forms()) if \
+                        form.name == 'login'), None)
+        if form_nr is None:
+            return False
 
+        self.select_form(nr=form_nr)
+        self.form['userid'], self.form['pwd'] = username, password
+        self.submit()
+
+        # Check to ensure that Jobmine is open
         if 'errorCode=999' in self.geturl():
             raise JobmineException('Jobmine is currently closed.')
 
+        # Save reference to credentials for auth_required and cookies
+        self.save_cookies()
+        self._credentials = {
+            'username': username,
+            'password': password
+        }
+
         return True
+
+    def auth_required(function):
+        """
+        Auth wrapper to specify function requires the user to be logged in.
+        """
+        def wrapped(instance, *args, **kwargs):
+            """
+            Function wrapper.
+            """
+            instance.open(instance.DEFAULT_URL)
+            if not hasattr(instance, '_credentials'):
+                raise JobmineException('Jobmine method requires user to be authenticated.')
+
+            # If we are not currently logged in, attempt to log in and raise an
+            # exception if it fails.
+            instance.open(instance.DEFAULT_URL)
+            if instance.geturl() != instance.DEFAULT_URL and \
+               (not hasattr(instance, '_credentials') or not instance.authenticate(**instance._credentials)):
+                raise JobmineException('Could not authenticate the user.')
+            return function(instance, *args, **kwargs)
+        return wrapped
 
     def parse(self, endpoint, regex):
         """
@@ -273,14 +281,7 @@ class JobmineBrowser(anonbrowser.AnonBrowser):
 
         return map(lambda row: OrderedDict(zip(headers, row)), rows)
 
-    def list_shortlist(self):
-        """
-        List the user's shortlisted jobs.
-
-        :return    List of dictionaries
-        """
-        return self.parse('shortlist', r'trUW_CO_STUJOBLST.*')
-
+    @auth_required
     def list_applications(self, active=False):
         """
         List the applications the user has made.
@@ -290,6 +291,7 @@ class JobmineBrowser(anonbrowser.AnonBrowser):
         return self.parse('applications',
                           'tr.*UW_CO_APPS%s.*' % ('V\$' if active else '_VW2'))
 
+    @auth_required
     def list_interviews(self, interview=None):
         """
         List the user's interviews, optionally filtered by the type.
@@ -313,6 +315,7 @@ class JobmineBrowser(anonbrowser.AnonBrowser):
                             interviews)
         return interviews
 
+    @auth_required
     def list_profile(self):
         """
         List the user's profile.
@@ -321,6 +324,7 @@ class JobmineBrowser(anonbrowser.AnonBrowser):
         """
         return self.parse('profile', r'trUW_CO_STDTERMVW.*')
 
+    @auth_required
     def list_documents(self):
         """
         List the user's resumes and packages.
@@ -329,6 +333,7 @@ class JobmineBrowser(anonbrowser.AnonBrowser):
         """
         return self.parse('documents', r'trUW_CO_STU_DOCS.*')
 
+    @auth_required
     def download_document(self, id, document_type=None):
         """
         Downloads the specified document into a temporary file and returns the path
@@ -352,6 +357,7 @@ class JobmineBrowser(anonbrowser.AnonBrowser):
 
             return tmp
 
+    @auth_required
     def delete_document(self, document_number):
         """
         Deletes the specified document.  Document must exist for this to work.
@@ -374,6 +380,7 @@ class JobmineBrowser(anonbrowser.AnonBrowser):
             # If the length is the same as before, that mean something went wrong
             raise JobmineException('Document deletion failed.  Manually delete.')
 
+    @auth_required
     def upload_document(self, path, name=None, existing=None):
         """
         Upload the document pointed to by the path as a new document on Jobmine,
@@ -435,6 +442,7 @@ class JobmineBrowser(anonbrowser.AnonBrowser):
         if 'error' in response or 'not available' in response:
             raise JobmineException('Document upload failed.  Manually upload.')
 
+    @auth_required
     def list_rankings(self):
         """
         List the user's job rankings.
@@ -443,6 +451,23 @@ class JobmineBrowser(anonbrowser.AnonBrowser):
         """
         return self.parse('rankings', r'trUW_CO_STU_RNK.*')
 
+    @auth_required
+    def list_jobs(self, limit=None, filters=None):
+        """
+        Search and list jobs.  By passing in key word arguments, the user can specify how
+        to filter the job search to narrow the results passed.
+
+        :return    Dictionary
+        """
+        generators = [rows for rows in self._get_jobs(limit, filters=filters)]
+        jobs = list(itertools.chain(*generators))
+
+        if len(jobs) > 0:
+            return jobs
+
+        return []
+
+    @auth_required
     def view_job(self, job_id):
         """
         View the specified job.  Requires a valid job identifier that can be retrieved from
@@ -479,6 +504,16 @@ class JobmineBrowser(anonbrowser.AnonBrowser):
         job_information['Description'] = description
         return job_information
 
+    @auth_required
+    def list_shortlist(self):
+        """
+        List the user's shortlisted jobs.
+
+        :return    List of dictionaries
+        """
+        return self.parse('shortlist', r'trUW_CO_STUJOBLST.*')
+
+    @auth_required
     def add_to_shortlist(self, job_id, filters=None):
         """
         Shortlists a job specified by the ID, can optionally pass in filters to make the search go
@@ -508,6 +543,7 @@ class JobmineBrowser(anonbrowser.AnonBrowser):
 
         return False
 
+    @auth_required
     def remove_from_shortlist(self, job_id):
         """
         Removes the job with the specified job id from the user's shortlist.
@@ -532,20 +568,29 @@ class JobmineBrowser(anonbrowser.AnonBrowser):
 
         return False
 
-    def list_jobs(self, limit=None, filters=None):
+    @auth_required
+    def post(self, url, data, files=None):
         """
-        Search and list jobs.  By passing in key word arguments, the user can specify how
-        to filter the job search to narrow the results passed.
+        Posts data to the specified url.
 
-        :return    Dictionary
+        :url       The url to post to
+        :data      Dictionary of form data
+        :files     Files (if any) to post
+        :return    String
         """
-        generators = [rows for rows in self._get_jobs(limit, filters=filters)]
-        jobs = list(itertools.chain(*generators))
+        response = requests.post(url, data=data, cookies=self.cookie_jar, headers={
+            'User-Agent': 'Mozilla/5.0'
+        }, files=files)
 
-        if len(jobs) > 0:
-            return jobs
+        return response.content
 
-        return []
+
+class Jobmine(JobmineBrowser):
+    """
+    Reference to the browser under the name of Jobmine.
+    """
+    pass
+
 
 class JobSearchQuery():
     """
@@ -699,13 +744,6 @@ class JobSearchQuery():
         url = url + '?{0}'.format(urllib.urlencode(serialized))
 
         return url
-
-
-class Jobmine(JobmineBrowser):
-    """
-    Reference to the browser under the name of Jobmine.
-    """
-    pass
 
 
 class CoopPrograms():
