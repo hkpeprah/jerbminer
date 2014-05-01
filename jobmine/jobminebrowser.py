@@ -116,7 +116,7 @@ class JobmineBrowser(anonbrowser.AnonBrowser):
             if extract:
                 filtered = filter(extract, jobs)
                 if len(filtered) >= 1:
-                    query.row = len(rows) + jobs.index(filtered[0])
+                    query.row = jobs.index(filtered[0])
                     yield filtered[0], query
                     break
                 rows += found
@@ -491,6 +491,7 @@ class JobmineBrowser(anonbrowser.AnonBrowser):
         if not filters:
             filters = {}
 
+        shortlist_size = len(self.list_shortlist())
         job, query = next(self._get_jobs(filters=filters, extract=lambda job: job['Job Identifier'] == job_id), 
                           (None, None))
 
@@ -501,7 +502,9 @@ class JobmineBrowser(anonbrowser.AnonBrowser):
                                                                                  query.get('ICSID'),
                                                                                  str(int(query.get('ICStateNum')) + 1))
             response = self.open_novisit(url).read()
-            return not('This page is no longer available' in response)
+            if shortlist_size >= len(self.list_shortlist()):
+                raise JobmineException('Something went wrong, manually add.')
+            return True
 
         return False
 
