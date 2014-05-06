@@ -487,7 +487,7 @@ class JobmineBrowser(anonbrowser.AnonBrowser):
 
         # Strip out empty whitespace lines and replace return carriages
         description = description.encode('ascii', 'ignore').replace('\r', '\n')
-        description = '\n'.join(filter(lambda s: re.match(r'[\-_0-9A-Za-z]+', s),
+        description = '\n'.join(filter(lambda s: re.search(r'[\-_0-9A-Za-z]+', s),
                                        description.split('\n')))
 
         # Parse the information on the page by finding key-value pairs denoted by headers that
