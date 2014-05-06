@@ -7,7 +7,12 @@ Jerbminer provides a script (and GUI application) for interfacing with the Unive
 * **Global**: `sudo pip install Jerbminer.tar.gz`
 
 ## To-dos
-Currently supports all operations but removing from shortlist, applying, and ranking.  Descriptions are also broken.  Otherwise, it supports doing most things.  If there is a feature you want, request it in the [issues page](https://github.com/hkpeprah/jerbminer/issues).
+Currently supports all operations but 
+
+* Applying to jobs
+* Ranking jobs  
+
+If there is any *other* feature you want, request it in the [issues page](https://github.com/hkpeprah/jerbminer/issues).
 
 ## Usage
 `Usage: jobmine command [arguments....]`
@@ -45,7 +50,7 @@ Currently supports all operations but removing from shortlist, applying, and ran
 ## Package
 This package/module provides the following utilities:
 
-* **JobmineBrowser** - Browser for Jobmine
+* **JobmineBrowser** - Browser for Jobmine.
 * **JobSearchQuery** - A query search for jobs.
 * **Programs** - The coop programs.
 
