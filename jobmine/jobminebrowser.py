@@ -483,7 +483,7 @@ class JobmineBrowser(anonbrowser.AnonBrowser):
         # Do some analyzation here to figure out what peices of content belong to what
         # from the raw string.
         raw = re.sub(r'\s\s+', '\n', content[0].text)
-        information, description = raw.split('Job Description')
+        information, description = raw.split('Job Description', 1)
 
         # Strip out empty whitespace lines and replace return carriages
         description = description.encode('ascii', 'ignore').replace('\r', '\n')
@@ -635,6 +635,7 @@ class JobSearchQuery():
         self.location('')
         self.title('')
         self.employer('')
+        self.disciplines()
         self._data = self.__data.copy()
 
     def get(self, name):
@@ -701,17 +702,20 @@ class JobSearchQuery():
 
         self.__readable_data['levels'] = levels
 
-    def disciplines(self, names):
+    def disciplines(self, names=None):
         discipline = 'UW_CO_JOBSRCH_UW_CO_ADV_DISCP{0}'
         programs = []
 
-        for index, name in enumerate(names):
-            if index > 2:
-                break
-            self.data[discipline.format(index + 1)] = CoopPrograms.get_value(name)
-            programs.append(name)
-
-        self.__readable_data['disciplines'] = programs
+        if names is not None:
+            for index, name in enumerate(names):
+                if index > 2:
+                    break
+                self.data[discipline.format(index + 1)] = CoopPrograms.get_value(name)
+                programs.append(name)
+            self.__readable_data['disciplines'] = programs
+        else:
+            for index in range(1, 4):
+                self.data[discipline.format(index)] = ""
 
     def paginate(self, down=False):
         if not 'ICStateNum' in self.data:
@@ -767,11 +771,14 @@ class CoopPrograms():
             programs = dict(programs)
 
         # Get the closest matching program to the on passed
-        closest_match = difflib.get_close_matches(program, programs.keys())
+        closest_match = difflib.get_close_matches(program.lower(), programs.keys(), cutoff=0.6)
+        if len(closest_match) > 0:
+            if value:
+                return programs.get(closest_match[0])
 
-        if value:
-            return programs.get(closest_match[0])
-        return closest_match
+            return closest_match
+
+        return None
 
     @classmethod
     def get_value(cls, program, major=None):
