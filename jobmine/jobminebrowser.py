@@ -493,11 +493,11 @@ class JobmineBrowser(anonbrowser.AnonBrowser):
         # Parse the information on the page by finding key-value pairs denoted by headers that
         # contain a colon
         regex = re.compile(r"""
-            ([\s\w\-,\.\#\(\)\&]+   # matches a value for the field
-            :                       # if colon, this is a key
-            (?:\n+)                 # non-capturing newline
-            [\w\s\-,\#\.\(\)\&]+    # matches a value for the field
-            (?:\n+))                # non-matching newline
+            ([\s\w\-,\.\#\(\)\&\/]+   # matches a value for the field
+            :                         # if colon, this is a key
+            (?:\n+)                   # non-capturing newline
+            [\w\s\-,\#\.\(\)\&\/]+    # matches a value for the field
+            (?:\n+))                  # non-matching newline
         """, re.VERBOSE)
         job_information = OrderedDict((key.strip(), val.strip()) for (key, val) in \
                                       map(lambda d: d.split(':'), re.findall(regex, information)))
