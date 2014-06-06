@@ -36,6 +36,8 @@ def parse_arguments(args):
     shortlist.add_argument('--remove', nargs=1, metavar='job_id', help='pass job identifier for a job to remove from your shortlist')
     shortlist.add_argument('--status', nargs='?', metavar='status', help='status of the job', default='posted',
                            choices=('approved', 'available', 'cancelled', 'posted'))
+    shortlist.add_argument('--order', nargs='?', metavar='order', help='order the results', default='employer',
+                           choices=('id', 'employer', 'name'))
 
     interviews = subparsers.add_parser('interviews', help='get interviews')
     interviews.add_argument('interview', choices=('group', 'special', 'cancelled', 'normal'), default='normal',
@@ -44,6 +46,10 @@ def parse_arguments(args):
     applications = subparsers.add_parser('applications', help='Get applications')
     applications.add_argument('--inactive', action='store_false', default=True,
                               help='grab applications, specify whether to grab active or inactive (defaults to active).')
+    applications.add_argument('--order', nargs='?', metavar='order', help='order the results', default='employer',
+                              choices=('apps', 'id', 'employer', 'name', 'status'))
+    applications.add_argument('--remove', nargs=1, metavar='job_id', help='remove the specified application')
+    applications.add_argument('--apply', nargs=2, metavar=('job_id', 'doc'), help='apply to the specified job with given document')
 
     search = subparsers.add_parser('jobs', help='search for jobs; all options are optional.')
     search.add_argument('--view', nargs='?', help='view the posting specified by the job id', dest='job_id')
@@ -74,6 +80,24 @@ def parse_arguments(args):
     else:
         browser = JobmineBrowser()
         username, password = get_user_info()
+        ordering = {
+            'apps': "#  Apps",
+            'id': "Job Identifier",
+            'name': "Job Title",
+            'employer': "Employer",
+            'status': "App. Status"
+        }
+
+
+        def sort(item, key):
+            """
+            """
+            try:
+                num = int(item[key])
+                return num
+            except ValueError:
+                return item[key]
+
 
         if username is None or password is None:
             raise JobmineException("No user found.  Have you run 'user --add'?")
@@ -95,9 +119,22 @@ def parse_arguments(args):
                 return browser.upload_document(path=opts['edit'][0],
                                                existing=int(opts['edit'][1]))
         elif opts['command'] == 'applications':
-            return browser.list_applications(active=opts['inactive'])
+            if opts['remove']:
+                _id = int(opts['remove'][0])
+                if _id <= 50:
+                    return browser.remove_application(id=_id)
+                return browser.remove_application(job_id=_id)
+            elif opts['apply']:
+                return browser.make_application(opts['apply'][0], opts['apply'][1])
+            else:
+                order = ordering.get(opts['order'])
+                applications = browser.list_applications(active=opts['inactive'])
+                return applications if applications is None else \
+                    sorted(applications, key=lambda app: sort(app, order))
+
         elif opts['command'] == 'interviews':
             return browser.list_interviews(interview=opts['interview'])
+
         elif opts['command'] == 'shortlist':
             if opts['add']:
                 return browser.add_to_shortlist(opts['add'][0], filters={
@@ -105,7 +142,12 @@ def parse_arguments(args):
                 })
             elif opts['remove']:
                 return browser.remove_from_shortlist(opts['remove'][0])
-            return browser.list_shortlist()
+
+            order = ordering.get(opts['order'])
+            shortlisted = browser.list_shortlist()
+            return shortlisted if shortlisted is None else \
+                sorted(shortlisted, key=lambda posting: sort(posting, order))
+
         elif opts['command'] == 'jobs':
             if opts['job_id']:
                 return browser.view_job(opts['job_id'])
@@ -131,6 +173,6 @@ def main(*args):
         args = sys.argv[1:] if len(args) == 0 else args
         result = parse_arguments(args)
         print format(result if result is not None else 'Success')
-    except JobmineException as e:
+    except (NotImplemented, JobmineException) as e:
         print 'Error: %s' % e
         exit(1)

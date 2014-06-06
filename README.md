@@ -7,10 +7,10 @@ Jerbminer provides a script (and GUI application) for interfacing with the Unive
 * **Global**: `sudo pip install Jerbminer.tar.gz`
 
 ## To-dos
-Currently supports all operations but 
-
-* Applying to jobs
-* Ranking jobs  
+* Add feature to apply to jobs
+* Add feature to rank jobs
+* Add feature to select interviews
+* Test cancel applications
 
 If there is any *other* feature you want, request it in the [issues page](https://github.com/hkpeprah/jerbminer/issues).
 
@@ -34,8 +34,11 @@ If there is any *other* feature you want, request it in the [issues page](https:
 |                 |                                    | --status {approved, .. }     | Status of the job (if not posted).            |
 | interviews      | Get your interviews.               | (no argument)                | Return all normal interviews.                 |
 |                 |                                    | {group, special, cancelled}  | Return group/special/cancelled interviews.    |
+|                 |                                    | --select                     | NOT IMPLEMENTED.                              |
 | applications    | List your applications.            | (no argument)                | Return list of active applications.           |
 |                 |                                    | --inactive                   | Return list of inactive applications.         |
+|                 |                                    | --remove {row, job_id}       | Remove the specified application.             |
+|                 |                                    | --apply job_id doc           | NOT IMPLEMENTED.                              |
 | jobs            | Search, view, apply for jobs.      | --view JOB_ID                | View the specified job information.           |
 |                 |                                    | --search                     | Search for jobs.  Add filters from below.     |
 |                 |                                    | --location LOCATION          | Location of the job.                          |

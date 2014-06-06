@@ -289,7 +289,54 @@ class JobmineBrowser(anonbrowser.AnonBrowser):
         :return    List of dictionaries
         """
         return self.parse('applications',
-                          'tr.*UW_CO_APPS%s.*' % ('V\$' if active else '_VW2'))
+                          'tr.*UW_CO_%s.*' % ('STU_APPS' if active else 'APPS'))
+
+    @auth_required
+    def remove_application(self, _id=None, job_id=None):
+        """
+        Removes the specified application.  One of _id (corresponding to row) or
+        the job identifier must be passed.
+
+        :_id      Row to delete
+        :job_id   Job identifier to delete
+        :return   None
+        """
+        prev_count = len(self.list_applications(False))
+        url = self.FOLDER_URL.format(self.ENDPOINTS['applications'])
+        soup = BeautifulSoup(self.open(url).read())
+        patt = 'tr.*UW_CO_APPS.*'
+
+        apps = list(soup.findAll('tr', id=re.compile(patt)))
+        selected = None
+
+        if _id is not None and _id < len(apps):
+            selected = _id
+        elif job_id is not None:
+            _id = 0
+            for row in apps:
+                row = row.find('span', id=re.compile('UW_CO_APPS_VW2_UW_CO_JOB_ID')).text
+                if int(row) == job_id:
+                    selected = _id
+                    break
+                _id = _id + 1
+
+        if selected is None:
+            raise JobmineException('Given id does not correspond to a valid job.')
+
+        action = 'UW_CO_APPSV$delete${0}$$0'.format(selected)
+        tokens = dict(self._get_tokens())
+        url = self.FOLDER_URL.format(self.ENDPOINTS['applications']) + \
+              '?ICAction={0}&ICSID={1}&ICStateNum={2}'.format(action, tokens['ICSID'], tokens['ICStateNum'])
+
+        response = self.open(url).read()
+        self.save(self.geturl())
+
+        if len(self.list_applications(False)) == prev_count:
+            raise JobmineException('Failed to remove application.')
+
+    @auth_required
+    def make_application(self, job_id, resume=None):
+        raise NotImplemented("Not implemented yet.")
 
     @auth_required
     def list_interviews(self, interview=None):
@@ -314,6 +361,10 @@ class JobmineBrowser(anonbrowser.AnonBrowser):
         interviews = filter(lambda interview: len(list(itertools.chain(*interview.values()))) > 0,
                             interviews)
         return interviews
+
+    @auth_required
+    def select_interview(self, interview=None):
+        raise NotImplementedError("Not implemented yet.")
 
     @auth_required
     def list_profile(self):
@@ -526,9 +577,18 @@ class JobmineBrowser(anonbrowser.AnonBrowser):
         if not filters:
             filters = {}
 
-        shortlist_size = len(self.list_shortlist())
-        job, query = next(self._get_jobs(filters=filters, extract=lambda job: job['Job Identifier'] == job_id), 
-                          (None, None))
+        job, shortlist_size = None, len(self.list_shortlist())
+        info, cond = self.view_job(job_id), lambda job: job['Job Identifier'] == job_id
+
+        filters.update({
+            'title': info['Job Title'],
+            'employer': info['Employer']
+        })
+
+        try:
+            job, query = next(self._get_jobs(filters=filters, extract=cond))
+        except StopIteration:
+            job = None
 
         # Check that job has not been added to the shortlist
         if job is not None and job['Short List'] != 'On Short List':
@@ -540,7 +600,6 @@ class JobmineBrowser(anonbrowser.AnonBrowser):
             if shortlist_size >= len(self.list_shortlist()):
                 raise JobmineException('Something went wrong, manually add.')
             return True
-
         return False
 
     @auth_required
